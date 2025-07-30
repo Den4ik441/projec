@@ -254,7 +254,7 @@ def start(message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     username = message.from_user.username
-    add_user(user_id=user_id, username=username)
+    db_module.add_user(user_id=user_id, username=username)
     print(f"[DEBUG] Username для user_id {user_id}: {username}")  # Отладочный вывод
     current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
@@ -273,7 +273,7 @@ def start(message):
             bot.send_message(
                 message.chat.id,
                 "🚫 Вас заблокировали в боте!",
-                disable_notification=True  # Отключаем уведомление
+                disable_notification=True
             )
             return
     
@@ -287,7 +287,7 @@ def start(message):
                 message.chat.id,
                 "🔔 Вы вышли из режима АФК. Ваши номера снова видны.",
                 parse_mode='HTML',
-                disable_notification=True  # Отключаем уведомление
+                disable_notification=True
             )
         except Exception as e:
             print(f"[ERROR] Не удалось отправить уведомление о выходе из АФК пользователю {user_id}: {e}")
@@ -320,7 +320,7 @@ def start(message):
             message.chat.id,
             moderator_text,
             parse_mode='HTML',
-            disable_notification=True  # Отключаем уведомление
+            disable_notification=True
         )
         return
     
@@ -356,7 +356,7 @@ def start(message):
                 "<b>🔹 Начните зарабатывать прямо сейчас!</b>",
                 reply_markup=markup,
                 parse_mode='HTML',
-                disable_notification=True  # Отключаем уведомление
+                disable_notification=True
             )
         else:
             # Send a temporary message to get message_id
@@ -364,7 +364,7 @@ def start(message):
                 chat_id,
                 "Загрузка меню...",
                 parse_mode='HTML',
-                disable_notification=True  # Отключаем уведомление
+                disable_notification=True
             )
             show_main_menu(chat_id, temp_message.message_id, user_id)
         return
@@ -399,7 +399,7 @@ def start(message):
                     "<b>🔹 Начните зарабатывать прямо сейчас!</b>",
                     reply_markup=markup,
                     parse_mode='HTML',
-                    disable_notification=True  # Отключаем уведомление
+                    disable_notification=True
                 )
             else:
                 # Send a temporary message to get message_id
@@ -407,7 +407,7 @@ def start(message):
                     chat_id,
                     "Загрузка меню...",
                     parse_mode='HTML',
-                    disable_notification=True  # Отключаем уведомление
+                    disable_notification=True
                 )
                 show_main_menu(chat_id, temp_message.message_id, user_id)
             return
@@ -418,7 +418,7 @@ def start(message):
                 bot.send_message(
                     message.chat.id, 
                     f"⏳ Ожидайте подтверждения. Вы сможете отправить новый запрос через {time_left} минут.",
-                    disable_notification=True  # Отключаем уведомление
+                    disable_notification=True
                 )
                 return
         cursor.execute('INSERT OR REPLACE INTO requests (ID, LAST_REQUEST, STATUS, BLOCKED, CAN_SUBMIT_NUMBERS) VALUES (?, ?, ?, ?, ?)',
@@ -427,12 +427,11 @@ def start(message):
         bot.send_message(
             message.chat.id, 
             "👋 Здравствуйте! Ожидайте, пока вас впустит администратор.",
-            disable_notification=True  # Отключаем уведомление
+            disable_notification=True
         )
         # Notify admins with approval buttons for non-admin/moderator pending users
         with db_module.get_db() as conn:
             cursor = conn.cursor()
-            # Dynamically create placeholders for config.ADMINS_ID
             admin_ids = config.ADMINS_ID
             admin_placeholders = ','.join('?' for _ in admin_ids)
             query = f'SELECT ID, LAST_REQUEST FROM requests WHERE STATUS = ? AND ID NOT IN (SELECT ID FROM requests WHERE ID IN ({admin_placeholders}) OR ID IN (SELECT ID FROM personal WHERE TYPE = ?)) AND ID != ?'
@@ -445,22 +444,18 @@ def start(message):
         
         for pending_user_id, reg_date in pending_users:
             try:
-                # Fetch user information using bot.get_chat_member
                 user = bot.get_chat_member(pending_user_id, pending_user_id).user
                 username = f"@{user.username}" if user.username else "Нет username"
-                # Create clickable username link
                 username_link = f"<a href=\"tg://user?id={pending_user_id}\">{username}</a>" if user.username else "Нет username"
             except Exception as e:
                 print(f"[ERROR] Не удалось получить username для user_id {pending_user_id}: {e}")
                 username_link = "Неизвестный пользователь"
 
-            # Add user details to admin_text
             admin_text += (
                 f"👤 Пользователь ID: <a href=\"https://t.me/@id{pending_user_id}\">{pending_user_id}</a> (Зарегистрирован: {reg_date})\n"
                 f"👤 Username: {username_link}\n\n"
             )
 
-            # Add approve/reject buttons for each user
             approve_button = types.InlineKeyboardButton(f"✅ Одобрить {pending_user_id}", callback_data=f"approve_user_{pending_user_id}")
             reject_button = types.InlineKeyboardButton(f"❌ Отклонить {pending_user_id}", callback_data=f"reject_user_{pending_user_id}")
             markup.row(approve_button, reject_button)
@@ -472,7 +467,7 @@ def start(message):
                     admin_text,
                     parse_mode='HTML',
                     reply_markup=markup,
-                    disable_notification=True  # Отключаем уведомление
+                    disable_notification=True
                 )
         except Exception as e:
             print(f"[ERROR] Не удалось отправить уведомление админам: {e}")
@@ -489,11 +484,9 @@ def show_main_menu(chat_id, message_id, user_id):
         else:
             is_afk, afk_locked = result
 
-    # Check if the user is a moderator
     is_moderator = db_module.is_moderator(user_id)
 
     if is_moderator:
-        # Получаем ID группы модератора
         with db_module.get_db() as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT GROUP_ID FROM personal WHERE ID = ? AND TYPE = ?', (user_id, 'moder'))
@@ -533,7 +526,7 @@ def show_main_menu(chat_id, message_id, user_id):
                     chat_id,
                     moderator_text,
                     parse_mode='HTML',
-                    disable_notification=True  # Отключаем уведомление
+                    disable_notification=True
                 )
     else:
         price = db_module.get_user_price(user_id)
@@ -567,6 +560,8 @@ def show_main_menu(chat_id, message_id, user_id):
         if not is_admin and not is_moderator:
             markup.add(types.InlineKeyboardButton("🗑️ Удалить номер", callback_data="delete_number"))
             markup.add(types.InlineKeyboardButton("✏️ Изменить номер", callback_data="change_number"))
+            markup.add(types.InlineKeyboardButton("🔐 2FA", callback_data="manage_2fa"))
+            markup.add(types.InlineKeyboardButton("🔓 Сбросить 2FA", callback_data="reset_2fa"))
 
         if is_admin:
             markup.add(types.InlineKeyboardButton("⚙️ Админка", callback_data="admin_panel"))
@@ -595,7 +590,7 @@ def show_main_menu(chat_id, message_id, user_id):
                     welcome_text,
                     parse_mode='HTML',
                     reply_markup=markup,
-                    disable_notification=True  # Отключаем уведомление
+                    disable_notification=True
                 )
 
         if is_afk and not afk_locked:
@@ -603,24 +598,26 @@ def show_main_menu(chat_id, message_id, user_id):
                 chat_id,
                 "🔔 Ваш АФК отключён. Ваши номера снова видны.",
                 parse_mode='HTML',
-                disable_notification=True  # Отключаем уведомление
+                disable_notification=True
             )
         elif is_afk and afk_locked:
             bot.send_message(
                 chat_id,
                 "🔔 Вы в режиме АФК, заблокированном администратором. Номера скрыты.",
                 parse_mode='HTML',
-                disable_notification=True  # Отключаем уведомление
+                disable_notification=True
             )
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_main")
 def back_to_main(call):
-    chat_id = call.message.chat.id
-    message_id = call.message.message_id
-    user_id = call.from_user.id
-    broadcast_state.pop(user_id, None)
-    show_main_menu(chat_id, message_id, user_id)
-
+    bot.answer_callback_query(call.id)
+    temp_message = bot.send_message(
+        call.message.chat.id,
+        "Загрузка меню...",
+        parse_mode='HTML',
+        disable_notification=True
+    )
+    show_main_menu(call.message.chat.id, temp_message.message_id, call.from_user.id)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_user_"))
 def approve_user_callback(call):
@@ -982,6 +979,96 @@ def process_new_number(message, original_message_id, old_number):
             disable_notification=True  # Отключаем уведомление
         )
         start(message)
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "manage_2fa")
+def manage_2fa(call):
+    try:
+        user_id = call.from_user.id
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🔙 Назад", callback_data="back_to_main"))
+        bot.answer_callback_query(call.id)
+        bot.send_message(
+            call.message.chat.id,
+            "🔐 Введите облачный пароль (2FA):",
+            parse_mode='HTML',
+            reply_markup=markup
+        )
+        bot.register_next_step_handler(call.message, process_2fa_input, user_id)
+    except Exception as e:
+        print(f"[ERROR] Ошибка в manage_2fa: {e}")
+        bot.answer_callback_query(call.id, "❌ Произошла ошибка при запросе 2FA!")
+
+def process_2fa_input(message, user_id):
+    try:
+        fa_code = message.text.strip()
+        if not fa_code:
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("🔙 Назад", callback_data="back_to_main"))
+            bot.send_message(
+                message.chat.id,
+                "❌ Пароль 2FA не может быть пустым! Пожалуйста, введите пароль:",
+                parse_mode='HTML',
+                reply_markup=markup
+            )
+            bot.register_next_step_handler(message, process_2fa_input, user_id)
+            return
+
+        with db_module.get_db() as conn:
+            cursor = conn.cursor()
+            # Сохраняем пароль в таблице users
+            cursor.execute('UPDATE users SET fa = ? WHERE ID = ?', (fa_code, user_id))
+            # Обновляем все номера пользователя в таблице numbers
+            cursor.execute('UPDATE numbers SET fa = ? WHERE ID_OWNER = ?', (fa_code, user_id))
+            conn.commit()
+
+        bot.send_message(
+            message.chat.id,
+            f"✅ Облачный пароль (2FA) '{fa_code}' успешно сохранён!",
+            parse_mode='HTML'
+        )
+        # Возвращаем пользователя в главное меню
+        temp_message = bot.send_message(
+            message.chat.id,
+            "Загрузка меню...",
+            parse_mode='HTML',
+            disable_notification=True
+        )
+        show_main_menu(message.chat.id, temp_message.message_id, user_id)
+    except Exception as e:
+        print(f"[ERROR] Ошибка в process_2fa_input: {e}")
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🔙 Назад", callback_data="back_to_main"))
+        bot.send_message(
+            message.chat.id,
+            "❌ Произошла ошибка при сохранении пароля 2FA!",
+            parse_mode='HTML',
+            reply_markup=markup
+        )
+
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "reset_2fa")
+def reset_2fa(call):
+    user_id = call.from_user.id
+    with db_module.get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET fa = NULL WHERE ID = ?', (user_id,))
+        cursor.execute('UPDATE numbers SET fa = NULL WHERE ID_OWNER = ?', (user_id,))
+        conn.commit()
+    bot.answer_callback_query(call.id)
+    bot.send_message(
+        call.message.chat.id,
+        "✅ Пароль 2FA сброшен!",
+        parse_mode='HTML'
+    )
+    temp_message = bot.send_message(
+        call.message.chat.id,
+        "Загрузка меню...",
+        parse_mode='HTML',
+        disable_notification=True
+    )
+    show_main_menu(call.message.chat.id, temp_message.message_id, user_id)
 
 #===========================================================================
 #======================ПРОФИЛЬ=====================ПРОФИЛЬ==================
@@ -3398,6 +3485,7 @@ def process_search_number(message, original_chat_id, original_message_id):
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("🔍 Попробовать снова", callback_data="search_number"))
         markup.add(types.InlineKeyboardButton("🔙 Назад в профиль", callback_data="profile"))
+        markup.add(types.InlineKeyboardButton("🔙 В главное меню", callback_data="back_to_main"))
         bot.send_message(
             message.chat.id,
             "❌ Пожалуйста, используйте reply на сообщение для ввода номера!",
@@ -3413,6 +3501,7 @@ def process_search_number(message, original_chat_id, original_message_id):
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("🔍 Попробовать снова", callback_data="search_number"))
         markup.add(types.InlineKeyboardButton("🔙 Назад в профиль", callback_data="profile"))
+        markup.add(types.InlineKeyboardButton("🔙 В главное меню", callback_data="back_to_main"))
         bot.send_message(
             message.chat.id,
             "❌ Неверный формат номера! Используйте российский номер, например: +79991234567",
@@ -3431,7 +3520,7 @@ def process_search_number(message, original_chat_id, original_message_id):
     with db.get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT NUMBER, ID_OWNER, STATUS, TAKE_DATE, SHUTDOWN_DATE, CONFIRMED_BY_MODERATOR_ID, TG_NUMBER, SUBMIT_DATE, GROUP_CHAT_ID
+            SELECT NUMBER, ID_OWNER, STATUS, TAKE_DATE, SHUTDOWN_DATE, CONFIRMED_BY_MODERATOR_ID, TG_NUMBER, SUBMIT_DATE, GROUP_CHAT_ID, fa
             FROM numbers
             WHERE NUMBER = ?
         ''', (normalized_number,))
@@ -3439,7 +3528,7 @@ def process_search_number(message, original_chat_id, original_message_id):
     
     # Формируем сообщение с информацией о номере
     if number_data:
-        number, owner_id, status, take_date, shutdown_date, confirmed_by_moderator_id, tg_number, submit_date, group_chat_id = number_data
+        number, owner_id, status, take_date, shutdown_date, confirmed_by_moderator_id, tg_number, submit_date, group_chat_id, fa_code = number_data
         
         # Получаем имя группы
         group_name = db.get_group_name(group_chat_id) if group_chat_id else "Не указана"
@@ -3460,20 +3549,23 @@ def process_search_number(message, original_chat_id, original_message_id):
                 moderator_info = f"Модератор: ID {confirmed_by_moderator_id}"
         
         # Получаем username владельца
-        owner_info = f"👤 Владелец: tg://openmessage?user_id={owner_id}"
+        owner_username = "Нет username"
         try:
             owner_data = bot.get_chat_member(message.chat.id, owner_id).user
-            owner_username = f"@{owner_data.username}" if owner_data.username else f"ID {owner_id}"
-            owner_info = f"👤 Владелец: {owner_username} (tg://openmessage?user_id={owner_id})"
+            owner_username = f"@{owner_data.username}" if owner_data.username else "Нет username"
         except Exception as e:
             print(f"[ERROR] Не удалось получить username владельца {owner_id}: {e}")
-            owner_info = f"👤 Владелец: ID {owner_id} (tg://openmessage?user_id={owner_id})"
         
-        # Формируем текст для номера
+        # Формируем 2FA текст
+        fa_text = f"2FA: {fa_code}" if fa_code else "2FA: не установлен"
+        
+        # Формируем текст для номера с кликабельной ссылкой на ID владельца
         text = (
             f"📱 <b>Информация о номере:</b>\n\n"
             f"📱 Номер: <code>{number}</code>\n"
-            f"{owner_info}\n"
+            f"👤 Владелец: <a href=\"tg://user?id={owner_id}\">ID {owner_id}</a>\n"
+            f"Username: {owner_username}\n"
+            f"{fa_text}\n"
             f"📊 Статус: {status}\n"
             f"🟢 Взято: {take_date_str}\n"
             f"🔴 Отстоял: {shutdown_date_str}\n"
@@ -3488,7 +3580,7 @@ def process_search_number(message, original_chat_id, original_message_id):
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("🔍 Поиск другого номера", callback_data="search_number"))
     markup.add(types.InlineKeyboardButton("🔙 Назад в профиль", callback_data="profile"))
-    markup.add(types.InlineKeyboardButton("🔙 Главное меню", callback_data="back_to_main"))
+    markup.add(types.InlineKeyboardButton("🔙 В главное меню", callback_data="back_to_main"))
     
     try:
         bot.edit_message_text(
@@ -3500,12 +3592,23 @@ def process_search_number(message, original_chat_id, original_message_id):
         )
     except Exception as e:
         print(f"[ERROR] Не удалось обновить сообщение: {e}")
-        bot.send_message(
-            original_chat_id,
-            text,
-            parse_mode='HTML',
-            reply_markup=markup
-        )
+        # Резервный вариант: отправляем новое сообщение с экранированием
+        try:
+            bot.send_message(
+                original_chat_id,
+                text,
+                parse_mode='HTML',
+                reply_markup=markup,
+                disable_web_page_preview=True
+            )
+        except Exception as e2:
+            print(f"[ERROR] Не удалось отправить новое сообщение: {e2}")
+            # Последний резерв: отправляем без HTML
+            bot.send_message(
+                original_chat_id,
+                text.replace('<b>', '').replace('</b>', '').replace('<code>', '').replace('</code>', '').replace('<a href="tg://user?id=', '').replace('">ID ', ': ID ').replace('</a>', ''),
+                reply_markup=markup
+            )
 
 #============================
 
@@ -3942,6 +4045,14 @@ def unblock_user(call):
     bot.answer_callback_query(call.id, f"Пользователь {user_id} разблокирован!")
     user_details(call)
 
+import logging
+from datetime import datetime
+import telebot.types as types
+import db
+import config
+
+# Настройка логирования
+logging.basicConfig(filename='bot.log', level=logging.DEBUG, format='%(asctime)s | %(levelname)s | %(message)s')
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("kick_user_"))
 def kick_user(call):
@@ -3961,33 +4072,77 @@ def kick_user(call):
         parse_mode='HTML',
         reply_markup=markup
     )
-#подтверждение кика из бота
+    logging.debug(f"Админ {call.from_user.id} запросил удаление пользователя {user_id}")
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith("confirm_kick_"))
 def confirm_kick_user(call):
     user_id = int(call.data.split("_")[2])
     try:
+        # Удаляем данные из базы с использованием транзакции
         with db.get_db() as conn:
             cursor = conn.cursor()
-            cursor.execute('DELETE FROM users WHERE ID = ?', (user_id,))
-            cursor.execute('DELETE FROM requests WHERE ID = ?', (user_id,))
-            cursor.execute('DELETE FROM numbers WHERE ID_OWNER = ?', (user_id,))
-            cursor.execute('DELETE FROM withdraws WHERE ID = ?', (user_id,))
-            cursor.execute('DELETE FROM checks WHERE USER_ID = ?', (user_id,))
-            cursor.execute('DELETE FROM personal WHERE ID = ?', (user_id,))
-            conn.commit()
-            print(f"[DEBUG] Пользователь {user_id} полностью удалён.")
+            cursor.execute('BEGIN TRANSACTION')
+            try:
+                # Получаем все номера пользователя для уведомления модераторов
+                cursor.execute('SELECT NUMBER, MODERATOR_ID FROM numbers WHERE ID_OWNER = ?', (user_id,))
+                user_numbers = cursor.fetchall()
+                
+                # Удаляем данные из всех таблиц
+                cursor.execute('DELETE FROM users WHERE ID = ?', (user_id,))
+                cursor.execute('DELETE FROM requests WHERE ID = ?', (user_id,))
+                cursor.execute('DELETE FROM numbers WHERE ID_OWNER = ?', (user_id,))
+                cursor.execute('DELETE FROM withdraws WHERE ID = ?', (user_id,))
+                cursor.execute('DELETE FROM checks WHERE USER_ID = ?', (user_id,))
+                cursor.execute('DELETE FROM personal WHERE ID = ?', (user_id,))
+                # Пометим пользователя как заблокированного (опционально)
+                cursor.execute('INSERT OR REPLACE INTO requests (ID, STATUS, BLOCKED) VALUES (?, ?, ?)', 
+                              (user_id, 'rejected', 1))
+                conn.commit()
+                logging.info(f"Пользователь {user_id} полностью удалён из базы данных.")
+            except Exception as e:
+                conn.rollback()
+                logging.error(f"Ошибка при удалении данных пользователя {user_id} из базы: {e}")
+                raise e
+
+        # Очистка временных данных в памяти
+        for number_dict in [active_code_requests, code_messages, confirmation_messages]:
+            numbers_to_remove = [number for number, data in number_dict.items() if data.get('user_id') == user_id]
+            for number in numbers_to_remove:
+                number_dict.pop(number, None)
+            logging.debug(f"Очищены временные данные для пользователя {user_id}: {numbers_to_remove}")
+
+        # Уведомляем модераторов, которые обрабатывали номера пользователя
+        moderators_notified = set()
+        for number, moderator_id in user_numbers:
+            if moderator_id and moderator_id not in moderators_notified:
+                try:
+                    bot.send_message(
+                        moderator_id,
+                        f"ℹ️ Все номера пользователя {user_id} были удалены, запросы кодов для них отменены."
+                    )
+                    logging.debug(f"Уведомлён модератор {moderator_id} об удалении номеров пользователя {user_id}")
+                    moderators_notified.add(moderator_id)
+                except Exception as e:
+                    logging.warning(f"Не удалось уведомить модератора {moderator_id}: {e}")
+
+        # Уведомляем пользователя, если возможно
         try:
             bot.send_message(
                 user_id,
                 "🚪 Вас выгнали из бота! Вам нужно снова подать заявку на вступление. Напишите /start"
             )
-        except:
-            pass
+            logging.debug(f"Отправлено уведомление о выгоне пользователю {user_id}")
+        except Exception as e:
+            logging.warning(f"Не удалось уведомить пользователя {user_id} о выгоне: {e}")
+
+        # Уведомляем админа и обновляем список пользователей
         bot.answer_callback_query(call.id, f"Пользователь {user_id} выгнан из бота!")
         call.data = "all_users_1"
         show_all_users(call)
+        logging.info(f"Админ {call.from_user.id} успешно выгнал пользователя {user_id}")
+
     except Exception as e:
-        print(f"[ERROR] Ошибка при удалении пользователя {user_id}: {e}")
+        logging.error(f"Ошибка при удалении пользователя {user_id}: {e}")
         bot.answer_callback_query(call.id, "❌ Произошла ошибка при удалении!")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("disable_numbers_"))
@@ -4694,7 +4849,7 @@ def process_numbers(message):
 
     valid_numbers = []
     invalid_numbers = []
-    used_numbers = []
+    restricted_status_numbers = []
     
     for number in numbers:
         number = number.strip()
@@ -4727,17 +4882,18 @@ def process_numbers(message):
             cursor = conn.cursor()
             success_count = 0
             already_exists = 0
-            used_count = 0
+            restricted_status_count = 0
             successfully_added = []
 
             for number in valid_numbers:
                 try:
-                    # Проверяем, был ли номер ранее подтверждён
-                    cursor.execute('SELECT NUMBER FROM numbers WHERE NUMBER = ? AND CONFIRMED_BY_MODERATOR_ID IS NOT NULL AND CONFIRMED_BY_MODERATOR_ID != 0', (number,))
-                    used_number = cursor.fetchone()
-                    if used_number:
-                        used_numbers.append(number)
-                        used_count += 1
+                    # Проверяем, имеет ли номер один из запрещённых статусов
+                    cursor.execute('SELECT NUMBER, STATUS FROM numbers WHERE NUMBER = ? AND STATUS IN (?, ?, ?, ?)', 
+                                  (number, 'отстоял', 'активен', 'слетел', 'невалид'))
+                    restricted_number = cursor.fetchone()
+                    if restricted_number:
+                        restricted_status_numbers.append(f"{number} ({restricted_number[1]})")
+                        restricted_status_count += 1
                         continue
 
                     # Проверяем, есть ли номер в активных записях
@@ -4769,9 +4925,9 @@ def process_numbers(message):
             response_text += "📱 Добавленные номера:\n" + "\n".join(successfully_added) + "\n"
         if already_exists > 0:
             response_text += f"⚠️ Уже существуют: {already_exists} номеров\n"
-        if used_count > 0:
-            response_text += f"🚫 Ранее подтверждены: {used_count} номеров\n"
-            response_text += "📱 Подтверждённые номера:\n" + "\n".join(used_numbers) + "\n"
+        if restricted_status_count > 0:
+            response_text += f"🚫 Нельзя перезалить (запрещённый статус): {restricted_status_count} номеров\n"
+            response_text += "📱 Номера с запрещённым статусом:\n" + "\n".join(restricted_status_numbers) + "\n"
         if invalid_numbers:
             response_text += f"❌ Неверный формат:\n" + "\n".join(invalid_numbers) + "\n"
 
@@ -4789,7 +4945,6 @@ def process_numbers(message):
         parse_mode='HTML',
         disable_notification=True
     )
-
 
 
 
@@ -5614,11 +5769,20 @@ def admin_enable_afk(call):
         bot.answer_callback_query(call.id, "❌ У вас нет прав для выполнения этого действия!")
         return
     
-    # Извлекаем target_user_id из callback_data
     target_user_id = int(call.data.replace("admin_enable_afk_", ""))
     
+    # Очистка данных номеров пользователя из confirmation_messages и code_messages
+    with db_module.get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT NUMBER FROM numbers WHERE ID_OWNER = ?', (target_user_id,))
+        numbers = cursor.fetchall()
+        for number_tuple in numbers:
+            number = number_tuple[0]
+            confirmation_messages.pop(f"{number}_{target_user_id}", None)
+            code_messages.pop(number, None)
+    
     # Обновляем статус AFK в базе данных
-    with db.get_db() as conn:
+    with db_module.get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('UPDATE users SET IS_AFK = ?, AFK_LOCKED = ? WHERE ID = ?', (1, 1, target_user_id))
         conn.commit()
@@ -5628,15 +5792,13 @@ def admin_enable_afk(call):
     chat_id = call.message.chat.id
     message_id = call.message.message_id
     
-    with db.get_db() as conn:
+    with db_module.get_db() as conn:
         cursor = conn.cursor()
-        # Извлекаем IS_AFK, AFK_LOCKED и USERNAME
         cursor.execute('SELECT IS_AFK, AFK_LOCKED, USERNAME FROM users WHERE ID = ?', (target_user_id,))
         user = cursor.fetchone()
         is_afk, afk_locked, username = user
         afk_status_text = "Включён" if is_afk else "Выключен"
         
-        # Форматируем username как кликабельную ссылку
         username_display = f"@{username}" if username and username != "Не указан" else "Нет username"
         username_text = f"👤 Username: <a href=\"tg://user?id={target_user_id}\">{username_display}</a>\n" if username and username != "Не указан" else "👤 Username: Нет username\n"
         
@@ -6753,13 +6915,13 @@ def mark_number_invalid(call):
                 bot.answer_callback_query(call.id, "❌ У вас нет прав для пометки этого номера как невалидного!")
                 return
 
-            # Удаляем номер из базы
+            # Обновляем статус номера на "невалид"
             try:
-                cursor.execute('DELETE FROM numbers WHERE NUMBER = ?', (number,))
+                cursor.execute('UPDATE numbers SET STATUS = ? WHERE NUMBER = ?', ('невалид', number))
                 conn.commit()
-                print(f"[DEBUG] Номер {number} удалён из базы данных")
+                print(f"[DEBUG] Номер {number} помечен как невалид")
             except Exception as e:
-                print(f"[ERROR] Ошибка при удалении номера {number} из базы: {e}")
+                print(f"[ERROR] Ошибка при обновлении статуса номера {number}: {e}")
                 raise e
 
         # Формируем confirmation_key
@@ -6800,7 +6962,7 @@ def mark_number_invalid(call):
             types.InlineKeyboardButton("🔙 Главное меню", callback_data="back_to_main")
         )
         bot.edit_message_text(
-            f"❌ Вы отметили номер {number} как невалидный. Номер удалён из системы.",
+            f"❌ Вы отметили номер {number} как невалидный. Номер помечен как невалид.",
             call.message.chat.id,
             call.message.message_id,
             reply_markup=markup_owner,
@@ -6816,7 +6978,7 @@ def mark_number_invalid(call):
             bot.send_message(
                 group_chat_id,
                 f"📱 <b>ТГ {tg_number}</b>\n"
-                f"❌ Владелец номера {number} отметил его как невалидный. \n Приносим свои извинения пожалуйста возьмите новый номер",
+                f"❌ Владелец номера {number} отметил его как невалидный. \n Приносим свои извинения, пожалуйста, возьмите новый номер",
                 reply_markup=markup_mod,
                 parse_mode='HTML'
             )
@@ -6827,7 +6989,7 @@ def mark_number_invalid(call):
                     bot.send_message(
                         moderator_id,
                         f"📱 <b>ТГ {tg_number}</b>\n"
-                        f"❌ Владелец номера {number} отметил его как невалидный. Номер удалён из системы.\n"
+                        f"❌ Владелец номера {number} отметил его как невалидный. Номер помечен как невалид.\n"
                         f"⚠️ Не удалось отправить сообщение в группу (ID: {group_chat_id}).",
                         reply_markup=markup_mod,
                         parse_mode='HTML'
@@ -6868,12 +7030,12 @@ def moderator_mark_number_invalid(call):
                 bot.answer_callback_query(call.id, "❌ Неверный ID владельца!")
                 return
 
-            # Удаляем номер из базы
-            cursor.execute('DELETE FROM numbers WHERE NUMBER = ?', (number,))
+            # Обновляем статус номера на "невалид"
+            cursor.execute('UPDATE numbers SET STATUS = ? WHERE NUMBER = ?', ('невалид', number))
             conn.commit()
 
         bot.edit_message_text(
-            f"✅ Номер {number} успешно удален из системы",
+            f"✅ Номер {number} помечен как невалид",
             call.message.chat.id,
             call.message.message_id,
             parse_mode='HTML'
@@ -6888,9 +7050,9 @@ def moderator_mark_number_invalid(call):
         try:
             bot.send_message(
                 owner_id,
-                f"❌ Ваш номер {number} был отклонен модератором.\n📱 Проверьте номер и сдайте заново.",
-                reply_markup=markup_owner,
-                parse_mode='HTML'
+                f"❌ Ваш номер {number} был помечен как невалид модератором.\n📱 Проверьте номер и сдайте заново.",
+                parse_mode='HTML',
+                reply_markup=markup_owner
             )
         except telebot.apihelper.ApiTelegramException as e:
             print(f"Не удалось отправить сообщение владельцу {owner_id}: {e}")
@@ -6898,7 +7060,7 @@ def moderator_mark_number_invalid(call):
                 try:
                     bot.send_message(
                         admin_id,
-                        f"⚠️ Не удалось уведомить владельца {owner_id} об отклонении номера {number}: {e}",
+                        f"⚠️ Не удалось уведомить владельца {owner_id} о пометке номера {number} как невалид: {e}",
                         parse_mode='HTML'
                     )
                 except:
@@ -6915,11 +7077,11 @@ def moderator_mark_number_invalid(call):
             if not active_code_requests[owner_id]:
                 del active_code_requests[owner_id]
 
-        bot.answer_callback_query(call.id, "✅ Номер успешно удалён.")
+        bot.answer_callback_query(call.id, "✅ Номер успешно помечен как невалид.")
     except Exception as e:
         print(f"Ошибка в moderator_mark_number_invalid: {e}")
         bot.answer_callback_query(call.id, "❌ Произошла ошибка при обработке номера!")
-        
+          
 
 # Словари для хранения контекста
 confirmation_messages = {}
@@ -7409,19 +7571,26 @@ def confirm_code(call):
         group_chat_id = int(parts[4])
         tg_number = int(parts[5])
         
-        with db.get_db() as conn:
+        with db_module.get_db() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT MODERATOR_ID, GROUP_CHAT_ID, ID_OWNER FROM numbers WHERE NUMBER = ?', (number,))
+            cursor.execute('SELECT MODERATOR_ID, GROUP_CHAT_ID, ID_OWNER, fa, (SELECT IS_AFK FROM users WHERE ID = numbers.ID_OWNER) AS is_afk FROM numbers WHERE NUMBER = ?', (number,))
             result = cursor.fetchone()
             if not result:
                 bot.answer_callback_query(call.id, "❌ Номер не найден!")
                 return
-            moderator_id, stored_chat_id, owner_id = result
+            moderator_id, stored_chat_id, owner_id, fa_code, is_afk = result
+        
+            # Проверка АФК-статуса владельца номера
+            if is_afk:
+                bot.answer_callback_query(call.id, "❌ Номер недоступен: пользователь в режиме АФК!")
+                # Очищаем данные номера из confirmation_messages и code_messages
+                confirmation_messages.pop(f"{number}_{owner_id}", None)
+                code_messages.pop(number, None)
+                return
         
         # Проверяем, что stored_chat_id совпадает с group_chat_id из callback
         if stored_chat_id != group_chat_id:
             print(f"[DEBUG] Несоответствие GROUP_CHAT_ID: stored_chat_id={stored_chat_id}, group_chat_id={group_chat_id}")
-            stored_chat_id = group_chat_id
             cursor.execute('UPDATE numbers SET GROUP_CHAT_ID = ? WHERE NUMBER = ?', (group_chat_id, number))
             conn.commit()
 
@@ -7436,7 +7605,7 @@ def confirm_code(call):
 
         try:    
             bot.edit_message_text(
-                f"✅ Код '{code}' для номера {number}  отправлен модератору.",
+                f"✅ Код '{code}' для номера {number} отправлен модератору.",
                 confirmation_chat_id,
                 confirmation_message_id,
                 parse_mode='HTML'
@@ -7457,15 +7626,18 @@ def confirm_code(call):
                 types.InlineKeyboardButton("✅ Да, встал", callback_data=f"number_active_{number}_{tg_number}"),
                 types.InlineKeyboardButton("❌ Нет, изменить", callback_data=f"number_invalid_{number}_{tg_number}")
             )
+            fa_text = f"2FA: {fa_code}" if fa_code else "2FA: не установлен"
             try:
                 message = bot.send_message(
                     group_chat_id,
                     f"📱 <b>ТГ {tg_number}</b>\n"
-                    f"📱 Код по номеру {number}\nКод: {code}\n\nВстал ли номер?",
+                    f"📱 Код по номеру {number}\n"
+                    f"Код: {code}\n"
+                    f"{fa_text}\n\n"
+                    "Встал ли номер?",
                     reply_markup=markup,
                     parse_mode='HTML'
                 )
-                # Сохраняем информацию о сообщении в code_messages
                 code_messages[number] = {
                     "chat_id": group_chat_id,
                     "message_id": message.message_id,
@@ -7479,12 +7651,14 @@ def confirm_code(call):
                     message = bot.send_message(
                         moderator_id,
                         f"📱 <b>ТГ {tg_number}</b>\n"
-                        f"📱 Код по номеру {number}\nКод: {code}\n\nВстал ли номер?\n"
+                        f"📱 Код по номеру {number}\n"
+                        f"Код: {code}\n"
+                        f"{fa_text}\n\n"
+                        "Встал ли номер?\n"
                         f"⚠️ Не удалось отправить сообщение в группу (ID: {group_chat_id}). Пожалуйста, проверьте права бота в группе.",
                         reply_markup=markup,
                         parse_mode='HTML'
                     )
-                    # Сохраняем информацию о сообщении в code_messages
                     code_messages[number] = {
                         "chat_id": moderator_id,
                         "message_id": message.message_id,
@@ -7701,6 +7875,8 @@ def number_active(call):
         print(f"[ERROR] Ошибка в number_active: {e}")
         bot.answer_callback_query(call.id, "❌ Произошла ошибка при подтверждении номера!")
 
+
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith("invalid_"))
 def handle_invalid_number(call):
     number = call.data.split("_")[1]
@@ -7708,7 +7884,7 @@ def handle_invalid_number(call):
         cursor = conn.cursor()
         cursor.execute('SELECT ID_OWNER FROM numbers WHERE NUMBER = ?', (number,))
         owner = cursor.fetchone()
-        cursor.execute('DELETE FROM numbers WHERE NUMBER = ?', (number,))
+        cursor.execute('UPDATE numbers SET STATUS = ? WHERE NUMBER = ?', ('невалид', number))
         conn.commit()
 
         if owner:
@@ -7717,16 +7893,16 @@ def handle_invalid_number(call):
             markup_owner.add(types.InlineKeyboardButton("🔙 Главное меню", callback_data="back_to_main"))
             try:
                 bot.send_message(owner[0], 
-                               f"❌ Ваш номер {number} был отклонен модератором.\n📱 Проверьте номер и сдайте заново.", 
-                               reply_markup=markup_owner)
-            except:
-                pass
+                               f"❌ Ваш номер {number} был помечен как невалидный модератором.\n📱 Проверьте номер и сдайте заново.", 
+                               reply_markup=markup_owner,
+                               parse_mode='HTML')
+            except telebot.apihelper.ApiTelegramException as e:
+                print(f"[ERROR] Не удалось отправить сообщение владельцу {owner[0]}: {e}")
 
- 
-    bot.edit_message_text(f"✅ Номер {number} успешно удален из системы", 
+    bot.edit_message_text(f"✅ Номер {number} помечен как невалид", 
                          call.message.chat.id, 
-                         call.message.message_id )
-
+                         call.message.message_id,
+                         parse_mode='HTML')
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("number_failed_"))
 def handle_number_failed(call):
@@ -8377,17 +8553,14 @@ def handle_verification_error(call):
 
 
 
-       
-
-
 @bot.callback_query_handler(func=lambda call: call.data.startswith("back_to_confirm_"))
 def back_to_confirm(call):
     try:
         number = call.data.split("_")[3]
         
-        with db.get_db() as conn:
+        with db_module.get_db() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT ID_OWNER, VERIFICATION_CODE, TAKE_DATE, TG_NUMBER FROM numbers WHERE NUMBER = ?', (number,))
+            cursor.execute('SELECT ID_OWNER, VERIFICATION_CODE, TAKE_DATE, TG_NUMBER, fa, (SELECT IS_AFK FROM users WHERE ID = numbers.ID_OWNER) AS is_afk FROM numbers WHERE NUMBER = ?', (number,))
             result = cursor.fetchone()
             
             if not result:
@@ -8401,15 +8574,31 @@ def back_to_confirm(call):
                 )
                 return
             
-            owner_id, code, take_date, tg_number = result
+            owner_id, code, take_date, tg_number, fa_code, is_afk = result
             if not tg_number:
                 tg_number = 1
+            
+            # Проверка АФК-статуса владельца номера
+            if is_afk:
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton("📲 Получить новый номер", callback_data="get_number"))
+                markup.add(types.InlineKeyboardButton("🔙 Главное меню", callback_data="back_to_main"))
+                bot.send_message(
+                    call.message.chat.id,
+                    f"❌ Номер {number} недоступен: пользователь в режиме АФК!\nПожалуйста, выберите другой номер.",
+                    reply_markup=markup
+                )
+                # Очищаем данные номера из confirmation_messages и code_messages
+                confirmation_messages.pop(f"{number}_{owner_id}", None)
+                code_messages.pop(number, None)
+                return
             
             try:
                 bot.delete_message(call.message.chat.id, call.message.message_id)
             except Exception as e:
                 print(f"Ошибка при удалении сообщения: {e}")
             
+            fa_text = f"2FA: {fa_code}" if fa_code else "2FA: не установлен"
             if code and take_date != "0":
                 markup = types.InlineKeyboardMarkup()
                 markup.add(
@@ -8419,7 +8608,10 @@ def back_to_confirm(call):
                 bot.send_message(
                     call.message.chat.id,
                     f"📱 <b>ТГ {tg_number}</b>\n"
-                    f"📱 Код по номеру {number}\nКод: {code}\n\nВстал ли номер?",
+                    f"📱 Код по номеру {number}\n"
+                    f"Код: {code}\n"
+                    f"{fa_text}\n\n"
+                    "Встал ли номер?",
                     parse_mode='HTML',
                     reply_markup=markup
                 )
@@ -8434,14 +8626,14 @@ def back_to_confirm(call):
                     call.message.chat.id,
                     f"📱 <b>ТГ {tg_number}</b>\n"
                     f"📱 Новый номер для проверки: <code>{number}</code>\n"
+                    f"{fa_text}\n\n"
                     "Ожидайте код от владельца или отметьте номер как невалидный.",
                     parse_mode='HTML',
                     reply_markup=markup
                 )
     except Exception as e:
         print(f"Ошибка в back_to_confirm: {e}")
-        bot.answer_callback_query(call.id, "❌ Произошла ошибка при возврате к подтверждению!")
-
+        bot.answer_callback_query(call.id, "❌ Произошла ошибка при возврате к подтверждению!")       
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "toggle_afk")
